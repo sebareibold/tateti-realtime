@@ -1,8 +1,7 @@
 import type { StatusBarProps } from '../types'
 
-const StatusBar = ({ appState, gameState, mySymbol }: StatusBarProps) => {
+const StatusBar = ({ appState, gameState, mySymbol, opponentName }: StatusBarProps) => {
   const getMessage = (): string => {
-    if (appState === 'idle') return 'Conectando...'
     if (appState === 'waiting') return 'Esperando rival...'
     if (appState === 'finished') {
       if (gameState?.winner === 'draw') return '¡Empate!'
@@ -14,7 +13,6 @@ const StatusBar = ({ appState, gameState, mySymbol }: StatusBarProps) => {
   }
 
   const getMessageClass = (): string => {
-    if (appState === 'idle') return 'text-synth-text'
     if (appState === 'waiting') return 'text-synth-text pixel-blink'
     if (appState === 'finished') {
       if (gameState?.winner === 'draw') return 'text-synth-text'
@@ -28,13 +26,20 @@ const StatusBar = ({ appState, gameState, mySymbol }: StatusBarProps) => {
   const showSymbol = appState === 'playing' || appState === 'finished'
 
   return (
-    <div className="w-72 bg-synth-surface border-2 border-synth-border px-4 py-3 flex items-center justify-between gap-4">
-      <span className={`font-pixel text-xs leading-relaxed ${getMessageClass()}`}>
-        {getMessage()}
-      </span>
-      {showSymbol && mySymbol && (
-        <span className={`font-pixel text-base shrink-0 ${mySymbol === 'X' ? 'text-synth-x glow-x' : 'text-synth-o glow-o'}`}>
-          {mySymbol}
+    <div className="w-72 bg-synth-surface border-2 border-synth-border px-4 py-3 flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-4">
+        <span className={`font-pixel text-xs leading-relaxed ${getMessageClass()}`}>
+          {getMessage()}
+        </span>
+        {showSymbol && mySymbol && (
+          <span className={`font-pixel text-base shrink-0 ${mySymbol === 'X' ? 'text-synth-x glow-x' : 'text-synth-o glow-o'}`}>
+            {mySymbol}
+          </span>
+        )}
+      </div>
+      {opponentName && (
+        <span className="font-pixel text-[10px] text-synth-text/60">
+          vs {opponentName}
         </span>
       )}
     </div>

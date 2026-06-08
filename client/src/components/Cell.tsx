@@ -1,12 +1,12 @@
 import type { CellProps } from '../types'
 
-const Cell = ({ value, index, onClick }: CellProps) => {
-  const isEmpty = value === null
+const Cell = ({ value, index, onClick, isMyTurn }: CellProps) => {
+  const isClickable = value === null && isMyTurn
 
   return (
     <div
       className={`bg-synth-surface aspect-square flex items-center justify-center ${
-        isEmpty
+        isClickable
           ? 'cursor-pointer hover:bg-white/10 transition-colors duration-100'
           : 'cursor-default'
       }`}
