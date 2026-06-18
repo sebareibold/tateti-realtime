@@ -8,10 +8,8 @@ const PORT = 3000;
 
 const rooms = new Map<string, GameState>();
 const playerRoom = new Map<string, string>();
-
-// [Fix 1 & 2] Mapea cada socket a su símbolo asignado para validar turnos en el servidor
-// y poder limpiar la entrada del rival al desconectar.
 const playerSymbol = new Map<string, "X" | "O">();
+const playerName = new Map<string, string>();
 
 const io = new Server(server, {
   cors: {
@@ -25,10 +23,10 @@ io.on("connection", (socket: Socket) => {
   console.log("Cliente conectado:", socket.id);
   console.log("=".repeat(50));
 
-  socket.on("join", () => {
-    // [Fix 4] Ignora joins duplicados del mismo socket (ej: React Strict Mode ejecuta
-    // el efecto dos veces en desarrollo, causando que el mismo socket emita "join" dos veces).
+  socket.on("join", ({ name }: { name: string }) => {
     if (playerRoom.has(socket.id)) return;
+
+    playerName.set(socket.id, name);
 
     let roomId = [...rooms.keys()].find(
       (id) => io.sockets.adapter.rooms.get(id)?.size === 1
@@ -52,9 +50,10 @@ io.on("connection", (socket: Socket) => {
 
       players.forEach((playerId, i) => {
         const symbol = i === 0 ? "X" : "O";
-        // [Fix 1] Persistimos el símbolo de cada jugador para poder validar turnos
+        const opponentId = players[i === 0 ? 1 : 0]!;
+        const opponentName = playerName.get(opponentId) ?? "Rival";
         playerSymbol.set(playerId, symbol as "X" | "O");
-        io.to(playerId).emit("start", { state, symbol });
+        io.to(playerId).emit("start", { state, symbol, opponentName });
       });
     }
   });
@@ -64,8 +63,6 @@ io.on("connection", (socket: Socket) => {
     const state = roomId ? rooms.get(roomId) : null;
 
     if (roomId && state) {
-      // [Fix 1] Rechaza el movimiento si no es el turno de este jugador.
-      // Sin esto, cualquier cliente conectado puede mover en nombre del rival.
       const symbol = playerSymbol.get(socket.id);
       if (symbol !== state.currentTurn) return;
 
@@ -83,15 +80,14 @@ io.on("connection", (socket: Socket) => {
       rooms.delete(roomId);
       playerRoom.delete(socket.id);
       playerSymbol.delete(socket.id);
+      playerName.delete(socket.id);
 
-      // [Fix 2] Limpia también las entradas del rival para evitar el memory leak.
-      // Sin esto, playerRoom y playerSymbol acumulan entradas huérfanas hasta
-      // que el rival también se desconecta.
       const remaining = io.sockets.adapter.rooms.get(roomId);
       if (remaining) {
         for (const otherId of remaining) {
           playerRoom.delete(otherId);
           playerSymbol.delete(otherId);
+          playerName.delete(otherId);
         }
       }
     }

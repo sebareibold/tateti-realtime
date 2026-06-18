@@ -151,8 +151,8 @@ Escucha el evento `connection`, que Socket.io dispara automáticamente cada vez 
 #### `socket.on('disconnect', () => { ... })`
 Se dispara cuando ese cliente cierra la pestaña, pierde conexión, etc. Importante para limpiar el estado del juego si un jugador abandona la partida.
 
-#### `server.listen(3000, ...)`
-Le dice al servidor HTTP que empiece a escuchar en el puerto `3000`. El callback se ejecuta una sola vez cuando el servidor está listo.
+#### `server.listen(PORT, ...)`
+Le dice al servidor HTTP que empiece a escuchar en el puerto `PORT`(constante definida arriba). El callback se ejecuta una sola vez cuando el servidor está listo.
 
 ### Correr el servidor
 
