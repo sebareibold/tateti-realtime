@@ -24,12 +24,30 @@ io.on("connection", (socket: Socket) => {
   console.log("=".repeat(50));
 
   socket.on("join", ({ name }: { name: string }) => {
-    if (playerRoom.has(socket.id)) return;
+    const existingRoomId = playerRoom.get(socket.id);
+    if (existingRoomId) {
+      const existingState = rooms.get(existingRoomId);
+      if (existingState?.gameOver) {
+        // Partida terminada: limpiar para permitir rejoin
+        playerRoom.delete(socket.id);
+        playerSymbol.delete(socket.id);
+        playerName.delete(socket.id);
+        socket.leave(existingRoomId);
+        const remaining = io.sockets.adapter.rooms.get(existingRoomId);
+        if (!remaining || remaining.size === 0) {
+          rooms.delete(existingRoomId);
+        }
+      } else {
+        return; // Partida activa, ignorar join duplicado
+      }
+    }
 
     playerName.set(socket.id, name);
 
     let roomId = [...rooms.keys()].find(
-      (id) => io.sockets.adapter.rooms.get(id)?.size === 1
+      (id) =>
+        io.sockets.adapter.rooms.get(id)?.size === 1 &&
+        !rooms.get(id)?.gameOver
     );
 
     if (!roomId) {
