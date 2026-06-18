@@ -58,6 +58,14 @@ export const useGame = () => {
     socket.emit('join', { name })
   }
 
+  const rejoinGame = () => {
+    setGameState(null)
+    setMySymbol(null)
+    setOpponentName(null)
+    setAppState('waiting')
+    socket.emit('join', { name: myNameRef.current })
+  }
+
   const handleMove = (index: number) => {
     const isMyTurn = gameState?.currentTurn === mySymbol
     const canMove = appState === 'playing' && isMyTurn && !gameState?.gameOver
@@ -67,5 +75,5 @@ export const useGame = () => {
     }
   }
 
-  return { gameState, appState, mySymbol, opponentName, joinGame, handleMove }
+  return { gameState, appState, mySymbol, opponentName, joinGame, handleMove, rejoinGame }
 }

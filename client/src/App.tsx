@@ -4,7 +4,7 @@ import Board from './components/Board'
 import StatusBar from './components/StatusBar'
 
 function App() {
-  const { gameState, appState, mySymbol, opponentName, joinGame, handleMove } = useGame()
+  const { gameState, appState, mySymbol, opponentName, joinGame, handleMove, rejoinGame } = useGame()
   const [nameInput, setNameInput] = useState('')
 
   const handleJoin = (e: React.FormEvent) => {
@@ -49,6 +49,14 @@ function App() {
             mySymbol={mySymbol}
             onMove={handleMove}
           />
+          {appState === 'finished' && (
+            <button
+              onClick={rejoinGame}
+              className="font-pixel text-xs text-synth-gold border-2 border-synth-gold px-6 py-2 hover:bg-synth-gold hover:text-synth-bg transition-colors duration-100"
+            >
+              VOLVER A JUGAR
+            </button>
+          )}
         </>
       )}
     </div>
