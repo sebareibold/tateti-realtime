@@ -4,7 +4,7 @@ import { createInitialState, makeMove } from "./gameLogic";
 import { GameState } from "./types";
 
 const server = createServer();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 const rooms = new Map<string, GameState>();
 const playerRoom = new Map<string, string>();
@@ -13,7 +13,7 @@ const playerName = new Map<string, string>();
 
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:5173",
+    origin: process.env.CLIENT_URL || "http://localhost:5173",
     methods: ["GET", "POST"],
   },
 });
@@ -98,6 +98,6 @@ io.on("connection", (socket: Socket) => {
 
 server.listen(PORT, () => {
   console.log("=".repeat(50));
-  console.log(`Servidor corriendo en http://localhost:${PORT}`);
+  console.log(`Servidor corriendo en puerto ${PORT}`);
   console.log("=".repeat(50));
 });
