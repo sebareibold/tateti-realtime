@@ -1268,3 +1268,60 @@ return (
 ```
 
 Durante los estados `idle` y `waiting` el Board directamente no existe en el DOM, así que el problema desaparece sin necesidad de manejar el estado vacío dentro del componente.
+
+---
+
+## 16. Deploy — Cliente en Vercel, Servidor en Railway
+
+Una vez terminado el desarrollo local, desplegamos ambas partes del proyecto en servicios en la nube.
+
+### ¿Por qué no Vercel para el servidor?
+
+Vercel es una plataforma de **funciones serverless**: cada request levanta una función efímera, la ejecuta y la destruye. Esto es incompatible con Socket.io por dos razones:
+
+1. **Conexiones persistentes:** Socket.io requiere mantener una conexión abierta (WebSocket o long-polling) durante toda la partida. Las funciones de Vercel tienen un timeout de 10-30 segundos y no pueden mantener conexiones vivas.
+
+2. **Estado en memoria:** El servidor guarda las rooms, jugadores y estado del juego en Maps (`rooms`, `playerRoom`, `playerSymbol`). En un entorno serverless ese estado se pierde entre invocaciones porque cada función corre en un proceso aislado sin memoria compartida.
+
+El cliente React, en cambio, es un build estático de archivos HTML/CSS/JS que Vercel sirve desde su CDN sin ningún problema.
+
+### Railway para el servidor
+
+**Railway** es una plataforma de deploy para aplicaciones con servidor persistente. A diferencia de Vercel, corre el proceso Node.js de forma continua, lo que permite mantener conexiones WebSocket abiertas y estado en memoria durante toda la vida de la instancia.
+
+#### Configuración necesaria en el servidor
+
+Se agrega un script `start` en `server/package.json` que compila el TypeScript y luego ejecuta el resultado:
+
+```json
+{
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node index.ts"
+  }
+}
+```
+
+Railway detecta automáticamente que es un proyecto Node.js, ejecuta `npm run build` y luego `npm start`.
+
+#### Variable de entorno — puerto dinámico
+
+Railway asigna el puerto de forma dinámica mediante la variable de entorno `PORT`. El servidor debe leerla:
+
+```ts
+const PORT = process.env.PORT || 3000
+server.listen(PORT, () => {
+  console.log(`Servidor escuchando en puerto ${PORT}`)
+})
+```
+
+#### Configuración del cliente
+
+Una vez que Railway asigna una URL pública al servidor (por ejemplo `https://tateti-server.up.railway.app`), se actualiza la variable de entorno del cliente en Vercel:
+
+```
+VITE_SERVER_URL=https://tateti-server.up.railway.app
+```
+
+El cliente ya usa esa variable en `socket.ts` para conectarse, por lo que no requiere cambios en el código.
