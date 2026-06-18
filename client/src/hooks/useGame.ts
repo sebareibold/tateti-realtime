@@ -37,11 +37,19 @@ export const useGame = () => {
       socket.emit('join', { name: myNameRef.current })
     })
 
+    socket.on('disconnect', () => {
+      setGameState(null)
+      setMySymbol(null)
+      setOpponentName(null)
+      setAppState('idle')
+    })
+
     return () => {
       socket.off('waiting')
       socket.off('start')
       socket.off('update')
       socket.off('opponent_left')
+      socket.off('disconnect')
     }
   }, [])
 

@@ -1271,6 +1271,34 @@ Durante los estados `idle` y `waiting` el Board directamente no existe en el DOM
 
 ---
 
+## 16. Bug — tablero bloqueado en turno propio
+
+**Síntoma:**
+Durante una partida real en producción, en ocasiones la UI mostraba "Tu turno" pero las celdas no respondían a ningún click.
+
+**Root cause:**
+El cliente usa socket.io con reconexión automática. Cuando hay una falla de red momentánea (corte breve, timeout de Railway, etc.), el socket se desconecta y se reconecta automáticamente. Al reconectar, el servidor asigna un **nuevo `socket.id`**: el socket anterior ya no existe, y con él desaparecen todas las entradas en `playerRoom`, `playerSymbol` y `playerName`.
+
+El cliente, sin embargo, no sabe que se desconectó. React conserva el estado anterior: `appState = 'playing'`, `gameState` con el tablero actual, `mySymbol` con el símbolo asignado. El StatusBar sigue mostrando "Tu turno" y el tablero se ve normal.
+
+Cuando el usuario hace click, `handleMove` emite `socket.emit('move', index)` al servidor. El servidor recibe el evento pero no encuentra al socket en `playerRoom`, así que lo ignora silenciosamente. No llega ningún `update` de vuelta. La UI no cambia. El usuario cree que no puede clickear, cuando en realidad sus clicks llegan al servidor pero son descartados.
+
+**Fix:**
+Se agrega un listener para el evento `disconnect` del socket en el cliente. Al desconectarse, se resetea todo el estado a `idle`:
+
+```ts
+socket.on('disconnect', () => {
+  setGameState(null)
+  setMySymbol(null)
+  setOpponentName(null)
+  setAppState('idle')
+})
+```
+
+Cuando el socket se corta, el cliente vuelve a la pantalla de ingreso de nombre en lugar de quedarse en un tablero fantasma. El usuario ve que se desconectó y puede volver a unirse a una partida normalmente.
+
+---
+
 ## 16. Deploy — Cliente en Vercel, Servidor en Railway
 
 Una vez terminado el desarrollo local, desplegamos ambas partes del proyecto en servicios en la nube.
@@ -1325,6 +1353,125 @@ VITE_SERVER_URL=https://tateti-server.up.railway.app
 ```
 
 El cliente ya usa esa variable en `socket.ts` para conectarse, por lo que no requiere cambios en el código.
+
+---
+
+## 17. Corrección de errores de deploy en Railway
+
+Al intentar deployar el servidor en Railway aparecieron dos errores que requirieron fixes en el código.
+
+---
+
+### Error 1 — `Cannot find module '/app/index.js'`
+
+**Problema:**
+Railway ejecuta `npm start` para levantar el servidor. Como `package.json` no tenía un script `start`, Node intentó correr directamente el archivo indicado en el campo `"main": "index.js"`. Ese archivo no existía porque el TypeScript nunca había sido compilado: no había ningún script `build` que corriera `tsc`.
+
+**Fix en `package.json`:**
+Se agregaron los scripts `build` y `start`:
+
+```json
+"scripts": {
+  "build": "tsc",
+  "start": "node dist/index.js",
+  "dev": "ts-node index.ts"
+}
+```
+
+- `build` compila todo el TypeScript a JavaScript en la carpeta `dist/`
+- `start` ejecuta el resultado compilado
+- `dev` sigue usando `ts-node` para desarrollo local (sin compilar)
+
+**Fix en `tsconfig.json`:**
+La opción `outDir` estaba comentada, por lo que `tsc` no sabía dónde poner los archivos compilados. Se descomentó para apuntar a `dist/`:
+
+```json
+"outDir": "./dist"
+```
+
+Sin esto, aunque se corriera `tsc`, el archivo `dist/index.js` nunca se generaba y `npm start` fallaba igual.
+
+---
+
+### Error 2 — CORS bloqueado por el navegador
+
+**Problema:**
+Al abrir el cliente en Vercel (`https://tateti-realtime.vercel.app`) e intentar conectarse al servidor en Railway (`https://tateti-realtime-production.up.railway.app`), el navegador bloqueaba todas las requests con el error:
+
+```
+CORS Missing Allow Origin — código de estado 502
+```
+
+**¿Qué es CORS?**
+
+CORS (Cross-Origin Resource Sharing) es un mecanismo de seguridad del navegador. Cuando una página web hace una request a un dominio distinto del que la sirvió, el navegador primero le pregunta al servidor destino: "¿permitís requests desde este origen?". El servidor responde con una cabecera HTTP:
+
+```
+Access-Control-Allow-Origin: https://tateti-realtime.vercel.app
+```
+
+Si esa cabecera no está presente o no coincide con el origen del cliente, el navegador cancela la request y muestra el error de CORS. Esto pasa **antes** de que la aplicación vea la respuesta: es el propio navegador quien bloquea.
+
+En desarrollo local esto no era un problema porque cliente y servidor corrían ambos en `localhost`, mismo origen. En producción, son dos dominios completamente distintos, y el bloqueo aparece.
+
+**Root cause:**
+El origen permitido estaba hardcodeado en `server/index.ts`:
+
+```ts
+const io = new Server(server, {
+  cors: {
+    origin: "http://localhost:5173",  // ← solo permite localhost
+  },
+});
+```
+
+En producción, el cliente viene de Vercel, no de `localhost:5173`, así que el servidor rechazaba todas las conexiones.
+
+**Primer intento de fix:**
+Se reemplazó el origen hardcodeado por una variable de entorno `CLIENT_URL`, con `localhost` como fallback para desarrollo:
+
+```ts
+const io = new Server(server, {
+  cors: {
+    origin: process.env.CLIENT_URL || "http://localhost:5173",
+    methods: ["GET", "POST"],
+  },
+});
+```
+
+Esto siguió fallando porque el valor de la variable en Railway no coincidía exactamente con el origen que mandaba el navegador (diferencias de barra final, timing del redeploy, etc.).
+
+**Fix final:**
+Dado que este es un proyecto universitario sin requisitos de seguridad estrictos, se optó por permitir todos los orígenes directamente con `"*"`:
+
+```ts
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"],
+  },
+});
+```
+
+Con esto el servidor acepta conexiones desde cualquier dominio sin configuración adicional. No es la práctica recomendada para aplicaciones en producción real, pero para el alcance de este proyecto es suficiente y elimina el problema por completo.
+
+---
+
+### Fix adicional — puerto dinámico
+
+El servidor también tenía el puerto hardcodeado:
+
+```ts
+const PORT = 3000;
+```
+
+Railway asigna el puerto de forma dinámica mediante la variable de entorno `PORT`. Si el servidor intenta escuchar en 3000 y Railway espera que escuche en otro puerto, el deploy falla o el tráfico nunca llega. Se corrigió para leer la variable de entorno:
+
+```ts
+const PORT = process.env.PORT || 3000;
+```
+
+El `|| 3000` mantiene el comportamiento en desarrollo local donde `PORT` no está definida.
 
 ---
 
